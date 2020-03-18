@@ -208,3 +208,32 @@ class mixer_hamiltonian(hamiltonian):
         return self.mixer_circuit
 
 
+    def controlledXMixer(self, beta, q, graph:nx.Graph, measure=False):
+        # allow for ancillary qubits so that controlled rotations can be performed.
+        # Include the controlled X-not version by adding X gates to each side of the controlled qubit line.
+        self.mixer_circuit = QuantumCircuit(len(graph.nodes) + 1, len(graph.nodes))
+
+        # Get all the q-regs
+        quantum_regs = self.mixer_circuit.qregs
+
+        # Declare last qreg to be the ancillary qubit
+        ancilla_qubit = quantum_regs[len(quantum_regs)- 1]
+
+        for n in graph.nodes:
+            bfs = dict(nx.traversal.bfs_successors(graph,n,depth_limit=1))
+            for source in bfs:
+                if len(bfs[source]) != 0: 
+                    control_bits = list(quantum_regs[n] for n in bfs[source])
+                    self.mixer_circuit.mct(control_bits,ancilla_qubit,None,mode="noancilla")
+                    self.mixer_circuit.mcrx(beta, [ancilla_qubit], quantum_regs[int(source)])
+                    self.mixer_circuit.mct(control_bits,ancilla_qubit,None,mode='noancilla')
+                    self.mixer_circuit.barrier()
+                else:
+                    self.mixer_circuit.rx(beta, int(source))
+            
+            if measure == True:
+                self.mixer_circuit.barrier()
+                self.mixer_circuit.measure(range(len(graph.nodes)),range(len(graph.nodes)))
+
+            return self.mixer_circuit
+
