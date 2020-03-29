@@ -43,9 +43,9 @@ class max_cut:
         if graph == None:
             raise ValueError('Missing Argument: {} for "graph:nx.Graph"'.format(graph))
         else:
-            self.circuit = self.phse_ham.perEdgeMap(graph,hyperparams[0],True,True)
+            self.circuit = self.phse_ham.perEdgeMap([hyperparams[0]], 1, graph, True, True)
 
-            self.circuit += self.mx_ham.generalXMixer(hyperparams[1],0,True,True,graph)
+            self.circuit += self.mx_ham.generalXMixer([hyperparams[1]], 1, True, True, graph)
 
             return self.circuit.draw(output='mpl')
     

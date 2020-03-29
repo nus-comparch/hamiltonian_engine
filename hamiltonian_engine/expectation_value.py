@@ -56,7 +56,7 @@ class expectation_value:
                         temp_func1 = self.obj_exp
                         temp_func1 = temp_func1.subs(self.variables[0], bitstr[e[0]]) 
                         temp_func1 = temp_func1.subs(self.variables[1], bitstr[e[1]])
-                        
+
                         if self.is_boolean:
                             if temp_func1:
                                 temp_func = 1
@@ -67,11 +67,11 @@ class expectation_value:
                             graph_value = graph_value + graph.get_edge_data(e[0],e[1])["weight"] * temp_func1
                         
                     
-                    expectation_value = expectation_value + (counts[bitstr] / shots) * graph_value      
+                    expectation_value = expectation_value + counts[bitstr] * graph_value      
             else:
                 raise ValueError('Missing Argument: {} for "graph:nx.Graph"'.format(graph))
 
-        return expectation_value
+        return expectation_value / shots
 
 
 
