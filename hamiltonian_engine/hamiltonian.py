@@ -4,45 +4,108 @@ from qiskit import QuantumRegister, ClassicalRegister, QuantumCircuit
 import networkx as nx
 import numpy as np
 
+import os
+os.path.sys.path.append('../hamiltonian_engine/')
+from utils import circuit_builder as cir_build
 
 # TODO: Reconstruct phase hamiltonians for k-dits & constants are regarded as variables->free_symbols
 class hamiltonian:
 
-    #I = sympy.abc.I
+    # Symbols for converting objective function into Pauli expressions
     X = {}
     Y = {}
     Z = {}
     constants = []
-
-    qudit_map = {}
     symbolic_map = {}
 
+    # Meta data for circuit generations
+    quanCir_list = []
+    qubit_map = None
+
+    quantum_circuit = []
+    an = QuantumRegister(1, 'ancilla')
+
+    # Equations of phase hamiltonians
     obj_exp = ""
     Hamil_exp = ""
-    quanCir_list = []
+
 
     def __init__(self, expr_str, var):
-        self.__checkVariables(expr_str, var)
+        if expr_str != None:
 
-        # Initialize expressions and variables
-        self.expression_str = expr_str
-        self.variables = var
+            self.__checkVariables(expr_str, var)
 
-        self.obj_exp = sympify(self.expression_str)
+            # Initialize expressions and variables
+            self.expression_str = expr_str
+            self.variables = var
 
-        # Number of pauli objects are limited to the number of variables/qubits being used
-        i = 0
-        for sym in self.obj_exp.free_symbols:
-            if self.variables.count(str(sym)) > 0:
-                self.Z[sym] = symbols('Z_{}'.format(i))
-                self.X[sym] = symbols('X_{}'.format(i))
-                self.Y[sym] = symbols('Y_{}'.format(i))
-                self.symbolic_map[Not(sym)] = 0.5 * (I + self.Z[sym])
-                self.symbolic_map[sym] = 0.5*(I - self.Z[sym])
-                i += 1
-            else:
-                self.symbolic_map[sym] = sym * I
-                self.constants.append(sym)
+            self.obj_exp = sympify(self.expression_str)
+
+            # Number of pauli objects are limited to the number of variables/qubits being used
+            i = 0
+            for sym in self.obj_exp.free_symbols:
+                if self.variables.index(str(sym)) >= 0:
+                    i = self.variables.index(str(sym))
+                    ind = self.variables[i].find('_')
+                    subscrpt = self.variables[i][ind + 1]      
+                    self.Z[sym] = symbols('Z_{}'.format(subscrpt))
+                    self.X[sym] = symbols('X_{}'.format(subscrpt))
+                    self.Y[sym] = symbols('Y_{}'.format(subscrpt))
+                    self.symbolic_map[Not(sym)] = 0.5 * (I + self.Z[sym])
+                    self.symbolic_map[sym] = 0.5*(I - self.Z[sym])
+                    #i += 1
+                else:
+                    self.symbolic_map[sym] = sym * I
+                    self.constants.append(sym)
+        else:
+            self.variables = var
+
+    def __add__(self, other):
+        if isinstance(other, phase_hamiltonian) & isinstance(self, phase_hamiltonian):
+            temp_func = str(self.obj_exp + other.obj_exp - (self.obj_exp * other.obj_exp))
+            temp_var  = self.variables + list(set(other.variables) - set(self.variables))  
+
+            return phase_hamiltonian(temp_func, temp_var) 
+
+        elif (isinstance(other, float) | isinstance(other, int)) & isinstance(self, phase_hamiltonian):
+            temp_func = str(float(other) + self.obj_exp)
+
+            return phase_hamiltonian(temp_func, self.variables)
+        
+
+    def __mul__(self, other):
+        if isinstance(other, phase_hamiltonian) & isinstance(self, phase_hamiltonian):
+            temp_func = str(self.obj_exp * other.obj_exp)
+            temp_var  = self.variables + list(set(other.variables) - set(self.variables))
+
+            return phase_hamiltonian(temp_func, temp_var)
+
+        elif (isinstance(other, float) | isinstance(other, int)) & isinstance(self, phase_hamiltonian):
+            temp_func = str(float(other) * self.obj_exp)
+
+            return phase_hamiltonian(temp_func, self.variables)
+    
+    def __invert__(self):
+        return phase_hamiltonian(str(1 - (self.obj_exp)), self.variables)
+
+    def __truediv__(self, other):
+        if isinstance(self, hamiltonian) & isinstance(other, hamiltonian):
+            assert len(self.quantum_circuit) == len(other.quantum_circuit)
+            cirq = None
+            for i in range(len(self.quantum_circuit)):
+                if i == 0 :
+                    cirq = self.quantum_circuit[i] 
+                    temp = other.quantum_circuit[i]
+                    if temp.has_register(self.an):
+                        cirq.add_register(self.an)
+                    cirq = cirq + temp
+                else:
+                    temp1 = self.quantum_circuit[i] 
+                    temp2 = other.quantum_circuit[i]
+                    if temp.has_register(self.an):
+                        temp1.add_register(self.an)
+                    cirq = cirq + temp1 + temp2
+        return cirq
 
     # Need to check more cases so as to prevent future errors
     def __checkVariables(self, expression: str, variables: list):
@@ -71,9 +134,22 @@ class hamiltonian:
     def get_qubitMap(self):
         return self.qubit_map
 
+    def get_quantumCircuitAslist(self):
+        return self.quantum_circuit
+    
+    def get_quantumCircuit(self):
+        for i in range(len(self.quantum_circuit)):
+            if i  == 0:
+                c = self.quantum_circuit[i]
+            else:
+                temp = self.quantum_circuit[i]
+                c  = c + temp
+
+        return c
+
 
 class phase_hamiltonian(hamiltonian):
-    def __init__(self, expr_str, var):
+    def __init__(self, expr_str:str, var):
         super().__init__(expr_str, var)
 
     def Hamify(self, pwr_args=True, boolean=False, global_phse=True):
@@ -122,182 +198,145 @@ class phase_hamiltonian(hamiltonian):
 
     # multidimensional qubit mapping for problems involving k-dits
     def perDitMap(self, gamma, p, k_dits, graph: nx.Graph, sub_expr={'i': 'i'}, barrier=False, initial_Hadamard=False):
-        # Pre-processing before mapping the qudits
-        no_of_qubits = len(graph.nodes) * k_dits
+        assert p == len(gamma)
 
-        self.p_hamilCir = QuantumCircuit(no_of_qubits)
+        self.quantum_circuit = []
 
-        self._generate_quditMap(k_dits, graph, no_of_qubits)
+        self.qubit_map = cir_build.circuit_builder.map_qubits(self.variables, k_dits, graph)
 
-        if initial_Hadamard == True:
-            for i in range(no_of_qubits):
-                self.p_hamilCir.h(i)
-            self.p_hamilCir.barrier()
-
-        for e in graph.edges:
-            for i in range(k_dits):
-                nxt_i = eval(sub_expr['i']) % k_dits
-
-                self.p_hamilCir.cx(
-                    self.qudit_map[e[0]][i], self.qudit_map[e[1]][nxt_i])
-                self.p_hamilCir.rz(gamma, self.qudit_map[e[1]][nxt_i])
-                self.p_hamilCir.cx(
-                    self.qudit_map[e[0]][i], self.qudit_map[e[1]][nxt_i])
-
-        if barrier == True:
-            self.p_hamilCir.barrier()
-
-        return self.p_hamilCir
-
-    def _generate_quditMap(self, k_dits, graph: nx.Graph, no_of_qubits):
-        i = 0
-        for v in graph.nodes:
-            qbits = tuple()
-            for j in range(k_dits):
-                qbits = qbits + (i,)
-                i += 1
-            self.qudit_map[v] = qbits
-        assert i == no_of_qubits
-
-    # Map the qubits directly to each variable
-    def perQubitMap(self, gamma, p, barrier=False, initial_Hadamard=False):
-        self.p_hamilCir = QuantumCircuit(
-            len(self.variables), len(self.variables))
-
-        if initial_Hadamard == True:
-            for i in range(len(self.variables)):
-                self.p_hamilCir.h(i)
-            self.p_hamilCir.barrier()
-
-        for sub_cir in self.quanCir_list:
-            if sum(sub_cir) > 1:
-                indices = [i for i, x in enumerate(sub_cir) if x == 1]
-                for i in range(len(indices)):
-                    if i == len(indices) - 1:
-                        self.p_hamilCir.rz(gamma, indices[i])
-                    else:
-                        self.p_hamilCir.cx(indices[i], indices[i + 1])
-
-                for i in range(len(indices)-1, 0, -1):
-                    self.p_hamilCir.cx(indices[i-1], indices[i])
-
-            else:
-                self.p_hamilCir.rz(gamma, sub_cir.index(1))
-
-        if barrier == True:
-            self.p_hamilCir.barrier()
-
-        return self.p_hamilCir
-
-    # Only for 2 variable Expressions since each edge is an interaction between 2 vertices(qubits)
-    def perEdgeMap(self, gamma:list, p:int, G:nx.Graph,  barrier=False, initial_Hadamard=False):
-        self.p_hamilCir = QuantumCircuit(len(G.nodes), len(G.nodes))
-
-        if initial_Hadamard == True:
-            for i in range(len(G.nodes)):
-                self.p_hamilCir.h(i)
-        self.p_hamilCir.barrier()
+        no_qubits = len(graph.nodes) * k_dits
 
         for i in range(p):
-            for e in G.edges:
-                for sub_cir in self.quanCir_list:
-                    if sum(sub_cir) > 1:
-                        self.p_hamilCir.cx(e[0], e[1])
-                        self.p_hamilCir.rz(gamma[i], e[1])
-                        self.p_hamilCir.cx(e[0], e[1])
-                    else:
-                        self.p_hamilCir.rz(gamma[i], e[sub_cir.index(1)])
 
-        if barrier == True:
-            self.p_hamilCir.barrier()
+            cir = QuantumCircuit(no_qubits)
 
-        return self.p_hamilCir
+            if i == 0 and initial_Hadamard == True:
+                for j in range(no_qubits):
+                    cir.h(j)
+                cir.barrier() 
 
-    def get_objFun(self):
-        return super().get_objFun()
+            for e in graph.edges:
+                cir += cir_build.circuit_builder.generate_Ditcircuit(self.quanCir_list, gamma[i], self.qubit_map, e, sub_expr, k_dits, no_qubits)
+            
+            if barrier == True:
+                cir.barrier()
 
-    def get_pHamil(self):
-        return super().get_pHamil()
+            self.quantum_circuit.append(cir)
 
-    def get_qclist(self):
-        return super().get_qclist()
+    # Map the qubits directly to each variable
+    def perQubitMap(self, gamma:list, p, barrier=False, initial_Hadamard=False):
+        assert p == len(gamma)
 
-    def get_exprstring(self):
-        return super().get_exprstr()
+        self.quantum_circuit = []
 
-    def get_variablesList(self):
-        return super().get_variables()
+        self.qubit_map = cir_build.circuit_builder.map_qubits(self.variables, 0)
 
-    def get_qubitMap(self):
-        return super().get_qubitMap()
+        no_qubits = len(self.qubit_map.values())
+
+        for i in range(p):
+            cir = QuantumCircuit(no_qubits)
+
+            if i == 0 and initial_Hadamard == True:
+                for j in range(no_qubits):
+                    cir.h(j)
+                cir.barrier()
+
+            cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map)       
+
+            if barrier == True:
+                cir.barrier()
+
+            self.quantum_circuit.append(cir)
+
+    # Only for 2 variable Expressions since each edge is an interaction between 2 vertices(qubits)
+    def perEdgeMap(self, gamma:list, p:int, graph:nx.Graph,  barrier=False, initial_Hadamard=False):
+        assert p == len(gamma) 
+
+        self.quantum_circuit = []
+
+        self.qubit_map = cir_build.circuit_builder.map_qubits(self.variables, 0, graph)
+
+        no_qubits = len(self.qubit_map.values())
+
+        for i in range(p):
+            cir = QuantumCircuit(no_qubits)
+
+            if i == 0 and initial_Hadamard == True:
+                for j in range(no_qubits):
+                    cir.h(j)
+            cir.barrier()
+
+            for e in graph.edges:
+                cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, e)
+
+            if barrier == True:
+                cir.barrier()
+            
+            self.quantum_circuit.append(cir)
 
 
 class mixer_hamiltonian(hamiltonian):
-    def __init__(self, phase_ham:phase_hamiltonian):
-        super().__init__(phase_ham.get_exprstring(), phase_ham.get_variablesList())
+    def __init__(self, var=None, expr_str=None):
+        super().__init__(expr_str, var)
 
     # Mixer Hamiltonian for qubits to have dynamicity between {0,1}
-    def generalXMixer(self, betas:list, p:int, measure=False, graph_map=False, graph: nx.Graph = None):
-        if graph_map == False:
-            self.mixer_circuit = QuantumCircuit(
-                len(self.variables), len(self.variables))
-            for i in range(len(self.variables)):
-                self.mixer_circuit.rx(betas[0], i)
-        else:
-            if graph != None:
-                self.mixer_circuit = QuantumCircuit(
-                    len(graph.nodes), len(graph.nodes))
+    def generalXMixer(self, betas:list, p:int, qubit_map:dict, measure=False):
+
+        self.quantum_circuit = []
+
+        for i in range(p):
+            cir = QuantumCircuit()
+
+            cir += cir_build.circuit_builder.generate_RXcircuit(qubit_map, betas[i])
                 
-                for i in range(p):
-                    for v in range(len(graph.nodes)):
-                        self.mixer_circuit.rx(betas[i], v)
-            else:
-                raise ValueError(
-                    'Missing Argument: {} for "graph:nx.Graph"'.format(graph))
+            if measure == True and i == p - 1:
+                cir.measure_all()
 
-        if measure == True:
-            self.mixer_circuit.barrier()
-            if graph_map == False:
-                self.mixer_circuit.measure(
-                    range(len(self.variables)), range(len(self.variables)))
-            else:
-                self.mixer_circuit.measure(
-                    range(len(graph.nodes)), range(len(graph.nodes)))
-        return self.mixer_circuit
+            self.quantum_circuit.append(cir)
 
-    def controlledXMixer(self, beta, q, graph: nx.Graph, measure=False):
+
+    def controlledXMixer(self, beta:list, p:int, graph: nx.Graph, inverse:bool= False, measure=False):
         # allow for ancillary qubits so that controlled rotations can be performed.
         # Include the controlled X-not version by adding X gates to each side of the controlled qubit line.
-        self.mixer_circuit = QuantumCircuit(
-            len(graph.nodes) + 1, len(graph.nodes))
+        self.quantum_circuit = []
 
-        # Get all the q-regs
-        quantum_regs = self.mixer_circuit.qregs
+        for i in range(p):
+            cir = QuantumCircuit(len(graph.nodes))
 
-        # Declare last qreg to be the ancillary qubit
-        ancilla_qubit = quantum_regs[len(quantum_regs) - 1]
+            classical_regs = ClassicalRegister(len(graph.nodes))
+            cir.add_register(classical_regs)
+            # Get all the q-regs
+            quantum_regs = cir.qregs[0]
 
-        for n in graph.nodes:
-            bfs = dict(nx.traversal.bfs_successors(graph, n, depth_limit=1))
-            for source in bfs:
-                if len(bfs[source]) != 0:
-                    control_bits = list(quantum_regs[n] for n in bfs[source])
-                    self.mixer_circuit.mct(
-                        control_bits, ancilla_qubit, None, mode="noancilla")
-                    self.mixer_circuit.mcrx(
-                        beta, [ancilla_qubit], quantum_regs[int(source)])
-                    self.mixer_circuit.mct(
-                        control_bits, ancilla_qubit, None, mode='noancilla')
-                    self.mixer_circuit.barrier()
-                else:
-                    self.mixer_circuit.rx(beta, int(source))
+            # Declare last qreg to be the ancillary qubit
+            cir.add_register(self.an)
+            ancilla_qubit = self.an[0]
 
-            if measure == True:
-                self.mixer_circuit.barrier()
-                self.mixer_circuit.measure(
-                    range(len(graph.nodes)), range(len(graph.nodes)))
+            for n in graph.nodes:
+                bfs = dict(nx.traversal.bfs_successors(graph, n, depth_limit=1))
+                for source in bfs:
+                    if len(bfs[source]) != 0:
+                        control_bits = list(quantum_regs[n] for n in bfs[source])
+                        
+                        if inverse == True:
+                            cir.x(control_bits)
+                        
+                        cir.mct(
+                            control_bits, ancilla_qubit, None, mode="noancilla")
+                        cir.mcrx(
+                            beta[i], [ancilla_qubit], quantum_regs[int(source)])
+                        cir.mct(
+                            control_bits, ancilla_qubit, None, mode='noancilla')
+                        
+                        if inverse == True:
+                            cir.x(control_bits)
 
-            return self.mixer_circuit
+
+            if measure == True and i == p - 1:
+                cir.measure(quantum_regs, classical_regs)
+
+            self.quantum_circuit.append(cir)
+
 
     def single_XYMixer(self, xy: str, beta: float, qubit_1: int, qubit_2: int, ancillary_qubit: int = None):
         if qubit_1 == qubit_2:

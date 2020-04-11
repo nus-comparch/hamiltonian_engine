@@ -23,6 +23,8 @@ class expectation_value:
             if not bool(graph.get_edge_data(u,v)):
                 graph.add_edge(u, v, weight = weights)
 
+    def use_qubitMap(self, qubit_map:dict):
+        self.qubit_map = qubit_map
 
     def get_expectationValue(self, ciruit_results, shots:int, graph:nx.Graph=None): 
         
@@ -37,10 +39,9 @@ class expectation_value:
         if self.is_graph == False:
             for bitstr in counts:
                 temp_func = self.obj_exp
-                i = 0
+
                 for sym in self.obj_exp.free_symbols:
-                    temp_func = temp_func.subs(sym, bitstr[i])
-                    i += 1
+                    temp_func = temp_func.subs(sym, bitstr[self.qubit_map[str(sym)]])      
 
                 expectation_value = expectation_value + (counts[bitstr] / shots) * temp_func
         else:

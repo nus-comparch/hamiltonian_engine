@@ -21,10 +21,11 @@ class max_cut:
     shots = 0
     
 
-    def __init__(self, graph:nx.Graph, shots=1024, directed=False):
+    def __init__(self, p:int, graph:nx.Graph, shots=1024, directed=False):
         self.shots = shots
         self.graph = graph
         self.directed = directed
+        self.p = p
 
         if self.directed == False:
             self.phse_ham = phs_ham(self.objective_function,self.variables)
@@ -32,8 +33,9 @@ class max_cut:
         else:
             self.phse_ham = phs_ham(self.objective_functionDi, self.variables)
             self.expectation = ex_v(self.objective_functionDi, self.variables, is_graph=True)
+            assert isinstance(self.graph, nx.DiGraph)
 
-        self.mx_ham = mix_ham(self.phse_ham)
+        self.mx_ham = mix_ham()
 
         # generate Phase Hamiltonian
         self.phse_ham.Hamify(boolean=True)
@@ -43,13 +45,23 @@ class max_cut:
         if graph == None:
             raise ValueError('Missing Argument: {} for "graph:nx.Graph"'.format(graph))
         else:
-            self.circuit = self.phse_ham.perEdgeMap([hyperparams[0]], 1, graph, True, True)
+            assert len(hyperparams) == 2*self.p
+            
+            l = len(hyperparams)
+            gammas = hyperparams[:l//2]
+            betas  = hyperparams[l//2:]
 
-            self.circuit += self.mx_ham.generalXMixer([hyperparams[1]], 1, True, True, graph)
+            self.phse_ham.perEdgeMap(gammas, self.p, graph, True, True)
+
+            phse_map = self.phse_ham.qubit_map
+
+            self.mx_ham.generalXMixer(betas, self.p, phse_map,True)
+
+            self.circuit = self.phse_ham / self.mx_ham
 
             return self.circuit.draw(output='mpl')
     
-    def run_circuit(self, graph:nx.Graph, shots=1024):
+    def run_circuit(self, shots=1024):
         # Add backend for actual quantum chip
         backend      = Aer.get_backend("qasm_simulator")
         print('backend setup: Complete running circuit')
@@ -59,7 +71,7 @@ class max_cut:
 
         print('Simulation: Complete!')
 
-        print("Expectation Value : {}".format(self.expectation.get_expectationValue(results,shots,graph)))
+        print("Expectation Value : {}".format(self.expectation.get_expectationValue(results,shots,self.graph)))
 
         return results
 
