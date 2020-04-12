@@ -251,7 +251,7 @@ class phase_hamiltonian(hamiltonian):
     # Only for 2 variable Expressions since each edge is an interaction between 2 vertices(qubits)
     def perEdgeMap(self, gamma:list, p:int, graph:nx.Graph,  barrier=False, initial_Hadamard=False):
         assert p == len(gamma) 
-
+        
         self.quantum_circuit = []
 
         self.qubit_map = cir_build.circuit_builder.map_qubits(self.variables, 0, graph)
@@ -266,13 +266,44 @@ class phase_hamiltonian(hamiltonian):
                     cir.h(j)
             cir.barrier()
 
-            for e in graph.edges:
-                cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, e)
+            if len(self.variables) == 2:
+                for e in graph.edges:
+                    cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, e)
+            else:
+                cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, edge=(-1,-1))
 
             if barrier == True:
                 cir.barrier()
             
             self.quantum_circuit.append(cir)
+
+# Only for 2 variable Expressions since each edge is an interaction between 2 vertices(qubits)
+    def graph_Map(self, gamma:list, p:int, graph:nx.Graph,  barrier=False, initial_Hadamard=False):
+        assert p == len(gamma) 
+        
+        self.quantum_circuit = []
+
+        self.qubit_map = cir_build.circuit_builder.map_qubits(self.variables, 0, graph)
+
+        no_qubits = len(self.qubit_map.values())
+
+        for i in range(p):
+            cir = QuantumCircuit(no_qubits)
+
+            if i == 0 and initial_Hadamard == True:
+                for j in range(no_qubits):
+                    cir.h(j)
+            cir.barrier()
+            if len(self.variables) == 2:
+                for e in graph.edges:
+                    cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, e)
+            else:
+                cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, )
+            if barrier == True:
+                cir.barrier()
+            
+            self.quantum_circuit.append(cir)
+
 
 
 class mixer_hamiltonian(hamiltonian):
@@ -303,8 +334,6 @@ class mixer_hamiltonian(hamiltonian):
         for i in range(p):
             cir = QuantumCircuit(len(graph.nodes))
 
-            classical_regs = ClassicalRegister(len(graph.nodes))
-            cir.add_register(classical_regs)
             # Get all the q-regs
             quantum_regs = cir.qregs[0]
 
@@ -333,6 +362,8 @@ class mixer_hamiltonian(hamiltonian):
 
 
             if measure == True and i == p - 1:
+                classical_regs = ClassicalRegister(len(graph.nodes))
+                cir.add_register(classical_regs)
                 cir.measure(quantum_regs, classical_regs)
 
             self.quantum_circuit.append(cir)

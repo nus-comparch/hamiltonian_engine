@@ -51,12 +51,16 @@ class circuit_builder:
                 else:
                     qcircuit.rz(gamma, sub_cir.index(1))
             else:
-                if sum(sub_cir) > 1:
-                    qcircuit.cx(edge[0], edge[1])
-                    qcircuit.rz(gamma, edge[1])
-                    qcircuit.cx(edge[0], edge[1])
+                if len(sub_cir) > 1:
+                    if sum(sub_cir) > 1:
+                        qcircuit.cx(edge[0], edge[1])
+                        qcircuit.rz(gamma, edge[1])
+                        qcircuit.cx(edge[0], edge[1])
+                    else:
+                        qcircuit.rz(gamma, edge[sub_cir.index(1)])
                 else:
-                    qcircuit.rz(gamma, edge[sub_cir.index(1)])
+                    for v in qubit_map:
+                        qcircuit.rz(gamma, int(qubit_map[v]))
         
         return qcircuit
 

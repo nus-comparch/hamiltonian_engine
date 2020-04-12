@@ -47,32 +47,52 @@ class expectation_value:
         else:
             if graph != None:
                 self.__add_defaultWeights(graph, 1)
-
-                edges = graph.edges
-                
-                for bitstr in counts:
-                    graph_value = 0
-
-                    for e in edges:
-                        temp_func1 = self.obj_exp
-                        temp_func1 = temp_func1.subs(self.variables[0], bitstr[e[0]]) 
-                        temp_func1 = temp_func1.subs(self.variables[1], bitstr[e[1]])
-
-                        if self.is_boolean:
-                            if temp_func1:
-                                temp_func = 1
-                            else:
-                                temp_func = 0
-                            graph_value = graph_value + graph.get_edge_data(e[0],e[1])["weight"] * temp_func    
-                        else:
-                            graph_value = graph_value + graph.get_edge_data(e[0],e[1])["weight"] * temp_func1
-                        
+                if len(self.variables) > 1:
+                    edges = graph.edges
                     
-                    expectation_value = expectation_value + counts[bitstr] * graph_value      
+                    for bitstr in counts:
+                        graph_value = 0
+
+                        for e in edges:
+                            temp_func1 = self.obj_exp
+                            temp_func1 = temp_func1.subs(self.variables[0], bitstr[e[0]]) 
+                            temp_func1 = temp_func1.subs(self.variables[1], bitstr[e[1]])
+
+                            if self.is_boolean:
+                                if temp_func1:
+                                    temp_func = 1
+                                else:
+                                    temp_func = 0
+                                graph_value = graph_value + graph.get_edge_data(e[0],e[1])["weight"] * temp_func    
+                            else:
+                                graph_value = graph_value + graph.get_edge_data(e[0],e[1])["weight"] * temp_func1
+                            
+                        
+                        expectation_value = expectation_value + counts[bitstr] * graph_value      
+                else:
+                    vertices = graph.nodes
+                    
+                    for bitstr in counts:
+                        graph_value = 0
+
+                        for v in vertices:
+                            temp_func1 = self.obj_exp
+                            temp_func1 = temp_func1.subs(self.variables[0], bitstr[int(self.qubit_map[v])])
+
+                            if self.is_boolean:
+                                if temp_func1:
+                                    temp_func = 1
+                                else:
+                                    temp_func = 0
+                                graph_value = graph_value + temp_func    
+                            else:
+                                graph_value = graph_value + temp_func1
+                            
+                        expectation_value = expectation_value + counts[bitstr] * graph_value   
             else:
                 raise ValueError('Missing Argument: {} for "graph:nx.Graph"'.format(graph))
 
-        return expectation_value / shots
+        return float(expectation_value / shots)
 
 
 

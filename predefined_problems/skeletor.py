@@ -60,6 +60,7 @@ class skeletor:
 
         self.expectation.use_qubitMap(phse_map)
 
+        #self.mx_ham.controlledXMixer(betas, self.p, self.graph, inverse=True, measure=True)
         self.mx_ham.generalXMixer(betas, self.p, phse_map, True)
 
         self.circuit = self.phse_ham / self.mx_ham
