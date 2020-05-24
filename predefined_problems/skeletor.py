@@ -4,11 +4,14 @@ from qiskit.visualization import plot_histogram
 from qiskit import *
 from scipy.optimize import Bounds
 from scipy import optimize as opt
+import os
+os.path.abspath(os.curdir)
+print(os.curdir)
+os.path.sys.path.append('hamiltonian_engine/')
 from expectation_value import expectation_value as ex_v
 from hamiltonian import mixer_hamiltonian as mix_ham
 from hamiltonian import phase_hamiltonian as phs_ham
-import os
-os.path.sys.path.append('../hamiltonian_engine/')
+
 
 
 class skeletor:
@@ -60,8 +63,8 @@ class skeletor:
 
         self.expectation.use_qubitMap(phse_map)
 
-        #self.mx_ham.controlledXMixer(betas, self.p, self.graph, inverse=True, measure=True)
-        self.mx_ham.generalXMixer(betas, self.p, phse_map, True)
+        self.mx_ham.controlledXMixer(betas, self.p, self.graph, inverse=True, measure=True)
+        #self.mx_ham.generalXMixer(betas, self.p, phse_map, True)
 
         self.circuit = self.phse_ham / self.mx_ham
 

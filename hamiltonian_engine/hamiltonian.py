@@ -8,7 +8,9 @@ import os
 os.path.sys.path.append('../hamiltonian_engine/')
 from utils import circuit_builder as cir_build
 
-# TODO: Reconstruct phase hamiltonians for k-dits & constants are regarded as variables->free_symbols
+# TODO: 1. Reconstruct phase hamiltonians for k-dits & constants are regarded as variables->free_symbols
+#       2. Remove all ancillary qubit use since the project will attempt to not use any ancillary qubit
+
 class hamiltonian:
 
     # Symbols for converting objective function into Pauli expressions
@@ -152,7 +154,7 @@ class phase_hamiltonian(hamiltonian):
     def __init__(self, expr_str:str, var):
         super().__init__(expr_str, var)
 
-    def Hamify(self, pwr_args=True, boolean=False, global_phse=True):
+    def Hamify(self, pwr_args=True, boolean=False):
         if boolean == True:
             self.Hamil_exp = simplify_logic(self.obj_exp)
             self.Hamil_exp = self.Hamil_exp.replace(Or, Add)
@@ -170,8 +172,9 @@ class phase_hamiltonian(hamiltonian):
             lambda expr: expr.is_Pow and (expr.count(I) > 0), lambda expr: expr.base**1)
 
         # # Remove all Identity matrices and global phases
-        self.Hamil_exp = self.Hamil_exp.subs(I, 1)
-        coeff = self.Hamil_exp.as_coefficients_dict()
+        for sym in self.obj_exp.free_symbols:
+            self.Hamil_exp = self.Hamil_exp.subs(self.Z[sym]* I, self.Z[sym])
+        # coeff = self.Hamil_exp.as_coefficients_dict()
 
         # # Reduce variables with >= power(1) to power(1)
         if pwr_args == True:
@@ -179,13 +182,12 @@ class phase_hamiltonian(hamiltonian):
                 lambda expr: expr.is_Pow, lambda expr: expr.base**1)
 
         # Remove the global phase of the expression as it will not affect the outcome
-        if global_phse == True:
-            gbl_phse = coeff.get(1)
-            if gbl_phse != None:
-                self.Hamil_exp = self.Hamil_exp - gbl_phse
+        # if global_phse == True:
+        #     gbl_phse = coeff.get(1)
+        #     if gbl_phse != None:
+        #         self.Hamil_exp = self.Hamil_exp - gbl_phse
 
-            self.Hamil_exp = self.Hamil_exp.subs(
-                [(c, 0) for c in self.constants])
+        self.Hamil_exp = self.Hamil_exp.subs([(c, 0) for c in self.constants])
 
         # Convert to expression into a sympy poly to get list of monomial expression to build the QC
         # However for simplicity we will still reduce expressions with power > 1 to 1
@@ -194,7 +196,15 @@ class phase_hamiltonian(hamiltonian):
                 lambda expr: expr.is_Pow, lambda expr: expr.base**1)
             self.quanCir_list = Poly(temp).monoms()
         else:
-            self.quanCir_list = Poly(self.Hamil_exp).monoms()
+            temp = self.Hamil_exp.subs(I , 1)
+            
+            coeff = temp.as_coefficients_dict()
+            gbl_phse = coeff.get(1)
+
+            if gbl_phse != None:
+                temp = temp - gbl_phse
+            
+            self.quanCir_list = Poly(temp).monoms()
 
     # multidimensional qubit mapping for problems involving k-dits
     def perDitMap(self, gamma, p, k_dits, graph: nx.Graph, sub_expr={'i': 'i'}, barrier=False, initial_Hadamard=False):
@@ -239,7 +249,6 @@ class phase_hamiltonian(hamiltonian):
             if i == 0 and initial_Hadamard == True:
                 for j in range(no_qubits):
                     cir.h(j)
-                cir.barrier()
 
             cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map)       
 
@@ -251,7 +260,10 @@ class phase_hamiltonian(hamiltonian):
     # Only for 2 variable Expressions since each edge is an interaction between 2 vertices(qubits)
     def perEdgeMap(self, gamma:list, p:int, graph:nx.Graph,  barrier=False, initial_Hadamard=False):
         assert p == len(gamma) 
-        
+
+        self.__add_defaultWeights(graph)
+
+        full_hamiltonian = 0
         self.quantum_circuit = []
 
         self.qubit_map = cir_build.circuit_builder.map_qubits(self.variables, 0, graph)
@@ -264,17 +276,27 @@ class phase_hamiltonian(hamiltonian):
             if i == 0 and initial_Hadamard == True:
                 for j in range(no_qubits):
                     cir.h(j)
-            cir.barrier()
 
             if len(self.variables) == 2:
                 for e in graph.edges:
+                    # Experimental for Obtaining full Hamiltonians
+                    temp = self.Hamil_exp
+                    l = 0
+                    for sym in self.Hamil_exp.free_symbols:
+                        if not (sym == I):
+                            e[l]
+                            temp = temp.subs(sym, symbols('Z_{}'.format(e[l])))
+                            l = (l + 1) % 2
+                    full_hamiltonian += graph.get_edge_data(e[0],e[1])["weight"]* temp
+
+
                     cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, e)
             else:
                 cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, edge=(-1,-1))
 
             if barrier == True:
                 cir.barrier()
-            
+            self.Hamil_exp = full_hamiltonian
             self.quantum_circuit.append(cir)
 
 # Only for 2 variable Expressions since each edge is an interaction between 2 vertices(qubits)
@@ -298,11 +320,16 @@ class phase_hamiltonian(hamiltonian):
                 for e in graph.edges:
                     cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, e)
             else:
-                cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, )
+                cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map)
             if barrier == True:
                 cir.barrier()
             
             self.quantum_circuit.append(cir)
+
+    def __add_defaultWeights(self, graph:nx.Graph, weights=1):
+        for u,v in graph.edges:
+            if not bool(graph.get_edge_data(u,v)):
+                graph.add_edge(u, v, weight = weights)
 
 
 
@@ -338,29 +365,23 @@ class mixer_hamiltonian(hamiltonian):
             quantum_regs = cir.qregs[0]
 
             # Declare last qreg to be the ancillary qubit
-            cir.add_register(self.an)
-            ancilla_qubit = self.an[0]
+            # cir.add_register(self.an)
+            # ancilla_qubit = self.an[0]
 
             for n in graph.nodes:
                 bfs = dict(nx.traversal.bfs_successors(graph, n, depth_limit=1))
                 for source in bfs:
-                    if len(bfs[source]) != 0:
+                    if len(bfs[source]) > 0:
                         control_bits = list(quantum_regs[n] for n in bfs[source])
                         
                         if inverse == True:
                             cir.x(control_bits)
-                        
-                        cir.mct(
-                            control_bits, ancilla_qubit, None, mode="noancilla")
-                        cir.mcrx(
-                            beta[i], [ancilla_qubit], quantum_regs[int(source)])
-                        cir.mct(
-                            control_bits, ancilla_qubit, None, mode='noancilla')
+
+                        cir.mcrx(beta[i], control_bits, quantum_regs[int(source)])
                         
                         if inverse == True:
                             cir.x(control_bits)
-
-
+                                         
             if measure == True and i == p - 1:
                 classical_regs = ClassicalRegister(len(graph.nodes))
                 cir.add_register(classical_regs)
@@ -369,42 +390,42 @@ class mixer_hamiltonian(hamiltonian):
             self.quantum_circuit.append(cir)
 
 
-    def single_XYMixer(self, xy: str, beta: float, qubit_1: int, qubit_2: int, ancillary_qubit: int = None):
-        if qubit_1 == qubit_2:
-            raise ValueError(
-                "Error: qubit_1 and qubit_2 cannot have the same int values.")
-        else:
-            if xy == "xx":
-                self.mixer_circuit.h(qubit_1)
-                self.mixer_circuit.h(qubit_2)
-                self.mixer_circuit.cx(qubit_1, qubit_2)
+    # def single_XYMixer(self, xy: str, beta: float, qubit_1: int, qubit_2: int, ancillary_qubit: int = None):
+    #     if qubit_1 == qubit_2:
+    #         raise ValueError(
+    #             "Error: qubit_1 and qubit_2 cannot have the same int values.")
+    #     else:
+    #         if xy == "xx":
+    #             self.mixer_circuit.h(qubit_1)
+    #             self.mixer_circuit.h(qubit_2)
+    #             self.mixer_circuit.cx(qubit_1, qubit_2)
 
-                if ancillary_qubit == None:
-                    self.mixer_circuit.rz(beta, qubit_2)
-                else:
-                    self.mixer_circuit.crz(beta, ancillary_qubit, qubit_2)
+    #             if ancillary_qubit == None:
+    #                 self.mixer_circuit.rz(beta, qubit_2)
+    #             else:
+    #                 self.mixer_circuit.crz(beta, ancillary_qubit, qubit_2)
 
-                self.mixer_circuit.cx(qubit_1, qubit_2)
-                self.mixer_circuit.h(qubit_1)
-                self.mixer_circuit.h(qubit_2)
+    #             self.mixer_circuit.cx(qubit_1, qubit_2)
+    #             self.mixer_circuit.h(qubit_1)
+    #             self.mixer_circuit.h(qubit_2)
 
-            elif xy == 'yy':
-                x_rot = np.pi / 2
-                self.mixer_circuit.rx(x_rot, qubit_1)
-                self.mixer_circuit.rx(x_rot, qubit_2)
-                self.mixer_circuit.cx(qubit_1, qubit_2)
+    #         elif xy == 'yy':
+    #             x_rot = np.pi / 2
+    #             self.mixer_circuit.rx(x_rot, qubit_1)
+    #             self.mixer_circuit.rx(x_rot, qubit_2)
+    #             self.mixer_circuit.cx(qubit_1, qubit_2)
 
-                if ancillary_qubit == None:
-                    self.mixer_circuit.rz(beta, qubit_2)
-                else:
-                    self.mixer_circuit.crz(beta, ancillary_qubit, qubit_2)
+    #             if ancillary_qubit == None:
+    #                 self.mixer_circuit.rz(beta, qubit_2)
+    #             else:
+    #                 self.mixer_circuit.crz(beta, ancillary_qubit, qubit_2)
 
-                self.mixer_circuit.cx(qubit_1, qubit_2)
-                self.mixer_circuit.rx(x_rot, qubit_1)
-                self.mixer_circuit.rx(x_rot, qubit_2)
+    #             self.mixer_circuit.cx(qubit_1, qubit_2)
+    #             self.mixer_circuit.rx(x_rot, qubit_1)
+    #             self.mixer_circuit.rx(x_rot, qubit_2)
 
-            else:
-                raise ValueError(
-                    "Incorrect xy string; it can only be either 'xx' or 'yy'.")
+    #         else:
+    #             raise ValueError(
+    #                 "Incorrect xy string; it can only be either 'xx' or 'yy'.")
 
-        return self.mixer_circuit
+    #     return self.mixer_circuit

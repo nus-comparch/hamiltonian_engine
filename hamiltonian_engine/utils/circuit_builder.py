@@ -84,8 +84,7 @@ class circuit_builder:
     @staticmethod
     def generate_RXcircuit(qubit_map:dict, gamma):
         value = list(qubit_map.values())[0]
-        if isinstance(value
-        , tuple):
+        if isinstance(value, tuple):
             l = 0
             for v in qubit_map.values():
                 l += len(v)
@@ -104,3 +103,6 @@ class circuit_builder:
                 cir.rx(gamma, i)
 
             return cir
+
+    # @staticmethod
+    # def generate_Toffoli(q)
