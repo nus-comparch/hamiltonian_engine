@@ -103,6 +103,3 @@ class circuit_builder:
                 cir.rx(gamma, i)
 
             return cir
-
-    # @staticmethod
-    # def generate_Toffoli(q)

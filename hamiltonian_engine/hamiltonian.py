@@ -30,6 +30,7 @@ class hamiltonian:
     # Equations of phase hamiltonians
     obj_exp = ""
     Hamil_exp = ""
+    full_hamiltonian = None
 
 
     def __init__(self, expr_str, var):
@@ -122,7 +123,10 @@ class hamiltonian:
         return self.obj_exp
 
     def get_pHamil(self):
-        return self.Hamil_exp
+        if self.full_hamiltonian == None:
+            return self.Hamil_exp
+        else:
+            return self.full_hamiltonian
 
     def get_qclist(self):
         return self.quanCir_list
@@ -180,12 +184,6 @@ class phase_hamiltonian(hamiltonian):
         if pwr_args == True:
             self.Hamil_exp = self.Hamil_exp.replace(
                 lambda expr: expr.is_Pow, lambda expr: expr.base**1)
-
-        # Remove the global phase of the expression as it will not affect the outcome
-        # if global_phse == True:
-        #     gbl_phse = coeff.get(1)
-        #     if gbl_phse != None:
-        #         self.Hamil_exp = self.Hamil_exp - gbl_phse
 
         self.Hamil_exp = self.Hamil_exp.subs([(c, 0) for c in self.constants])
 
@@ -263,7 +261,7 @@ class phase_hamiltonian(hamiltonian):
 
         self.__add_defaultWeights(graph)
 
-        full_hamiltonian = 0
+        self.full_hamiltonian = 0
         self.quantum_circuit = []
 
         self.qubit_map = cir_build.circuit_builder.map_qubits(self.variables, 0, graph)
@@ -284,11 +282,10 @@ class phase_hamiltonian(hamiltonian):
                     l = 0
                     for sym in self.Hamil_exp.free_symbols:
                         if not (sym == I):
-                            e[l]
                             temp = temp.subs(sym, symbols('Z_{}'.format(e[l])))
                             l = (l + 1) % 2
-                    full_hamiltonian += graph.get_edge_data(e[0],e[1])["weight"]* temp
-
+                    if i == 0:
+                        self.full_hamiltonian += graph.get_edge_data(e[0],e[1])["weight"]* temp
 
                     cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, e)
             else:
@@ -296,7 +293,7 @@ class phase_hamiltonian(hamiltonian):
 
             if barrier == True:
                 cir.barrier()
-            self.Hamil_exp = full_hamiltonian
+
             self.quantum_circuit.append(cir)
 
 # Only for 2 variable Expressions since each edge is an interaction between 2 vertices(qubits)
@@ -363,10 +360,6 @@ class mixer_hamiltonian(hamiltonian):
 
             # Get all the q-regs
             quantum_regs = cir.qregs[0]
-
-            # Declare last qreg to be the ancillary qubit
-            # cir.add_register(self.an)
-            # ancilla_qubit = self.an[0]
 
             for n in graph.nodes:
                 bfs = dict(nx.traversal.bfs_successors(graph, n, depth_limit=1))

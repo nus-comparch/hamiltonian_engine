@@ -33,7 +33,7 @@ class expectation_value:
         expectation_value = 0
         
         #Assumption: the coefficients are already in the obj function thus no weights are required
-        #            weights are assumed to used for grpahs thus adding weights to the edges that 
+        #            weights are assumed to used for graphs thus adding weights to the edges that 
         #            are connected by 2 vertices.
 
         if self.is_graph == False:
