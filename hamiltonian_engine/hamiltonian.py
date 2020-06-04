@@ -8,9 +8,6 @@ import os
 os.path.sys.path.append('../hamiltonian_engine/')
 from utils import circuit_builder as cir_build
 
-# TODO: 1. Reconstruct phase hamiltonians for k-dits & constants are regarded as variables->free_symbols
-#       2. Remove all ancillary qubit use since the project will attempt to not use any ancillary qubit
-
 class hamiltonian:
 
     # Symbols for converting objective function into Pauli expressions
@@ -294,33 +291,6 @@ class phase_hamiltonian(hamiltonian):
             if barrier == True:
                 cir.barrier()
 
-            self.quantum_circuit.append(cir)
-
-# Only for 2 variable Expressions since each edge is an interaction between 2 vertices(qubits)
-    def graph_Map(self, gamma:list, p:int, graph:nx.Graph,  barrier=False, initial_Hadamard=False):
-        assert p == len(gamma) 
-        
-        self.quantum_circuit = []
-
-        self.qubit_map = cir_build.circuit_builder.map_qubits(self.variables, 0, graph)
-
-        no_qubits = len(self.qubit_map.values())
-
-        for i in range(p):
-            cir = QuantumCircuit(no_qubits)
-
-            if i == 0 and initial_Hadamard == True:
-                for j in range(no_qubits):
-                    cir.h(j)
-            cir.barrier()
-            if len(self.variables) == 2:
-                for e in graph.edges:
-                    cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, e)
-            else:
-                cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map)
-            if barrier == True:
-                cir.barrier()
-            
             self.quantum_circuit.append(cir)
 
     def __add_defaultWeights(self, graph:nx.Graph, weights=1):
