@@ -6,7 +6,6 @@ from scipy.optimize import Bounds
 from scipy import optimize as opt
 import os
 os.path.abspath(os.curdir)
-print(os.curdir)
 os.path.sys.path.append('hamiltonian_engine/')
 from expectation_value import expectation_value as ex_v
 from hamiltonian import mixer_hamiltonian as mix_ham
