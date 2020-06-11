@@ -274,18 +274,26 @@ class phase_hamiltonian(hamiltonian):
 
             if len(self.variables) == 2:
                 for e in graph.edges:
-                    # Experimental for Obtaining full Hamiltonians
-                    temp = self.Hamil_exp
-                    l = 0
-                    for sym in self.Hamil_exp.free_symbols:
-                        if not (sym == I):
-                            temp = temp.subs(sym, symbols('Z_{}'.format(e[l])))
-                            l = (l + 1) % 2
                     if i == 0:
+                        temp = self.Hamil_exp
+                        l = 0
+                        for sym in self.Hamil_exp.free_symbols:
+                            if not (sym == I):
+                                temp = temp.subs(sym, symbols('Z_{}'.format(e[l])))
+                                l = (l + 1) % 2
+                            
                         self.full_hamiltonian += graph.get_edge_data(e[0],e[1])["weight"]* temp
 
                     cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, e)
             else:
+                if i == 0:
+                    for v in graph.nodes:
+                        temp = self.Hamil_exp
+                        for sym in self.Hamil_exp.free_symbols:
+                            if not (sym == I):
+                                temp = temp.subs(sym, symbols('Z_{}'.format(v)))
+                        self.full_hamiltonian += temp
+
                 cir += cir_build.circuit_builder.generate_Zcircuit(self.quanCir_list, gamma[i], self.qubit_map, edge=(-1,-1))
 
             if barrier == True:

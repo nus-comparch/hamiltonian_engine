@@ -94,6 +94,8 @@ class skeletor:
             results, self.shots, self.graph)
 
         return -1 * res_maxcut
+
+        
     def run_QAOA(self, init_hyperparams: list, method: str):
         # define the bounds for the hyperparameters
         bounds = [[0, 2*np.pi], [0, np.pi]]
