@@ -6,7 +6,7 @@ from scipy.optimize import Bounds
 from scipy import optimize as opt
 import os
 os.path.abspath(os.curdir)
-os.path.sys.path.append('hamiltonian_engine/')
+os.path.sys.path.append('../hamiltonian_engine/')
 from expectation_value import expectation_value as ex_v
 from hamiltonian import mixer_hamiltonian as mix_ham
 from hamiltonian import phase_hamiltonian as phs_ham
@@ -14,7 +14,7 @@ from hamiltonian import phase_hamiltonian as phs_ham
 
 
 class skeletor:
-    objective_function = None  # Try to state the actual functions
+    objective_function = None 
     variables = None
     graph = None
     shots = 0
@@ -46,6 +46,9 @@ class skeletor:
     def get_pHamil(self):
         return self.phse_ham.get_pHamil()
 
+    def set_upMixerHamiltonian(self, func, inverse=None):
+        self.mx_function = (func, inverse)
+        
     def generate_quantumCircuit(self, hyperparams: list):
         assert len(hyperparams) == 2*self.p
 
@@ -62,8 +65,10 @@ class skeletor:
 
         self.expectation.use_qubitMap(phse_map)
 
-        self.mx_ham.controlledXMixer(betas, self.p, self.graph, inverse=True, measure=True)
-        #self.mx_ham.generalXMixer(betas, self.p, phse_map, True)
+        if self.mx_function[0] == "general":
+            self.mx_ham.generalXMixer(betas, self.p, phse_map, True)
+        elif self.mx_function[0] == "controlled":
+            self.mx_ham.controlledXMixer(betas, self.p, self.graph, inverse=self.mx_function[1], measure=True)
 
         self.circuit = self.phse_ham / self.mx_ham
 
@@ -94,21 +99,22 @@ class skeletor:
             results, self.shots, self.graph)
 
         return -1 * res_maxcut
+
+        
     def run_QAOA(self, init_hyperparams: list, method: str):
         # define the bounds for the hyperparameters
-        bounds = [[0, 2*np.pi], [0, np.pi]]
-        cons = []
-        for factor in range(len(bounds)):
-            lower, upper = bounds[factor]
-            l = {'type': 'ineq',
-                 'fun': lambda x, lb=lower, i=factor: x[i] - lb}
-            u = {'type': 'ineq',
-                 'fun': lambda x, ub=upper, i=factor: ub - x[i]}
-            cons.append(l)
-            cons.append(u)
+        # bounds = [[0, 2*np.pi], [0, np.pi]]
+        # cons = []
+        # for factor in range(len(bounds)):
+        #     lower, upper = bounds[factor]
+        #     l = {'type': 'ineq',
+        #          'fun': lambda x, lb=lower, i=factor: x[i] - lb}
+        #     u = {'type': 'ineq',
+        #          'fun': lambda x, ub=upper, i=factor: ub - x[i]}
+        #     cons.append(l)
+        #     cons.append(u)
 
-        res = opt.minimize(self.run_skeletor, init_hyperparams,
-                           constraints=cons, tol=1e-3, method=method)
+        res = opt.minimize(self.run_skeletor, init_hyperparams, tol=1e-3, method=method)
 
         print(res)
 

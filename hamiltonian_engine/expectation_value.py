@@ -51,12 +51,13 @@ class expectation_value:
                     edges = graph.edges
                     
                     for bitstr in counts:
+                        reverse_bitstr = bitstr[::-1]
                         graph_value = 0
 
                         for e in edges:
                             temp_func1 = self.obj_exp
-                            temp_func1 = temp_func1.subs(self.variables[0], bitstr[e[0]]) 
-                            temp_func1 = temp_func1.subs(self.variables[1], bitstr[e[1]])
+                            temp_func1 = temp_func1.subs(self.variables[0], reverse_bitstr[e[0]]) 
+                            temp_func1 = temp_func1.subs(self.variables[1], reverse_bitstr[e[1]])
 
                             if self.is_boolean:
                                 if temp_func1:
@@ -73,11 +74,12 @@ class expectation_value:
                     vertices = graph.nodes
                     
                     for bitstr in counts:
+                        reverse_bitstr = bitstr[::-1]
                         graph_value = 0
 
                         for v in vertices:
                             temp_func1 = self.obj_exp
-                            temp_func1 = temp_func1.subs(self.variables[0], bitstr[int(self.qubit_map[v])])
+                            temp_func1 = temp_func1.subs(self.variables[0], reverse_bitstr[int(self.qubit_map[v])])
 
                             if self.is_boolean:
                                 if temp_func1:
